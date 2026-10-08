@@ -99,8 +99,13 @@ for (const p of [...models.getProviders()]) {
 /** The APIs whose endpoints list their models at `{baseUrl}/models`. */
 const LISTING_APIS = new Set(['openai-completions', 'openai-responses']);
 
-/** What a custom provider's cached model list depends on. */
-const endpointKey = (spec) => JSON.stringify([spec.api, spec.baseUrl, spec.headers ?? null]);
+/**
+ * What a custom provider's cached model list depends on: its endpoint, and
+ * how a listed model is made into one ([toModel]; raise it when that
+ * changes, so a list cached by an older version is fetched again).
+ */
+const MODEL_SHAPE = 2;
+const endpointKey = (spec) => JSON.stringify([MODEL_SHAPE, spec.api, spec.baseUrl, spec.headers ?? null]);
 
 /**
  * Listed models that cannot chat. Metadata decides when there is some; the
@@ -154,6 +159,7 @@ function findMetadata(id, index) {
 function toModel(spec, listed, meta) {
   const src = meta ?? listed;
   const params = src.supported_parameters;
+  const contextWindow = src.top_provider?.context_length ?? src.context_length ?? 128000;
   return {
     id: listed.id,
     name: meta?.name ?? listed.name ?? basename(listed.id),
@@ -172,10 +178,25 @@ function toModel(spec, listed, meta) {
       cacheRead: price(src.pricing?.input_cache_read),
       cacheWrite: price(src.pricing?.input_cache_write),
     },
-    contextWindow: src.top_provider?.context_length ?? src.context_length ?? 128000,
-    maxTokens: src.top_provider?.max_completion_tokens ?? 16384,
+    contextWindow,
+    maxTokens: outputLimit(src.top_provider?.max_completion_tokens, contextWindow),
     ...(spec.headers ? { headers: spec.headers } : {}),
   };
+}
+
+/** The most output asked of a custom endpoint's model per request. */
+const MAX_OUTPUT = 65536;
+
+/**
+ * The output limit a custom endpoint's model is asked for. The metadata is
+ * another provider's (OpenRouter's) word for the model, not this endpoint's:
+ * one that lists 943718 for a model this endpoint caps far lower makes every
+ * request a 400, and pi also keeps that much of the context free for the
+ * answer, so a limit near the window leaves none for the conversation.
+ */
+function outputLimit(listed, contextWindow) {
+  const n = Number.isFinite(listed) && listed > 0 ? listed : 16384;
+  return Math.max(1024, Math.min(n, MAX_OUTPUT, Math.floor(contextWindow / 4)));
 }
 
 /**
