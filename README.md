@@ -68,12 +68,23 @@ tree, reachable by `entry(id)`. A run a crash interrupted is reported by
 `FlPiLlm.complete` does a single completion outside any session, for things
 like a chat title.
 
+### From Rust
+
+The same runtime without Dart: `fl_pi_llm::host` (features `host`, and
+`reqwest` for `ReqwestFetch`; `default-features = false` drops the Dart
+bridge). The program answers what the Dart side answers — the network
+(`Fetch`), the session files (`SessionStore`: `DirectoryStore`,
+`MemoryStore`), credentials, tools and approvals — and gets sessions in the
+same format, so one written by a Rust host opens in an app and the other way
+round. Server Box's monitor agent runs it to keep its Agent sessions on the
+server.
+
 ## Layout
 
 | Path | What |
 |---|---|
 | `js/` | The Web platform layer QuickJS lacks (`src/web.js`), pi's filesystem over the host's store (`src/fs.js`) and the host API (`src/main.js`). Built into `rust/js/fl_pi_llm.js`, which `rust/build.rs` compiles to QuickJS bytecode. |
-| `rust/` | The runtime: a QuickJS context on its own thread, its timers and job queue, and the bridge to Dart. |
+| `rust/` | The runtime: a QuickJS context on its own thread, its timers and job queue, the bridge to Dart (`api`, feature `frb`) and the Rust host (`host`). |
 | `lib/` | The Dart API. HTTP is done here, with `HttpClient`; sessions are stored through `PiSessionStore`. |
 | `hook/` | The build hook that compiles `rust/`. No CocoaPods, no Gradle plugin, works with SwiftPM. |
 
