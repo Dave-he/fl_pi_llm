@@ -273,6 +273,14 @@ impl Runtime {
         self.request("sessions.delete", json!({ "sessionId": id })).await.map(drop)
     }
 
+    /// Closes the session `id` wherever its [`Session`] handle is: for a
+    /// handle still shared when its owner is done with it.
+    pub async fn close_session(&self, id: &str) -> Result<()> {
+        let r = self.request("session.close", json!({ "sessionId": id })).await;
+        self.0.sessions.lock().unwrap().remove(id);
+        r.map(drop)
+    }
+
     /// Opens the session `id`, creating it when there is none. `model` is an
     /// `LlmModelRef` (`{provider, id}` or a custom model with `api`,
     /// `baseUrl`). Without an approver, tools run unasked.

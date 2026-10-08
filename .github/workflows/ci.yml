@@ -53,6 +53,9 @@ jobs:
       - run: rustup show active-toolchain || rustup toolchain install
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      # The Rust host (`host`, `reqwest`), without the Dart bridge.
+      - run: cargo clippy --no-default-features --features reqwest --all-targets -- -D warnings
+      - run: cargo test --no-default-features --features reqwest
 
   dart:
     strategy:
