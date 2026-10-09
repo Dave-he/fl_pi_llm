@@ -1,4 +1,5 @@
 import 'package:fl_lib/fl_lib.dart';
+import 'package:fl_pi_llm/fl_pi_llm.dart';
 import 'package:fl_pi_llm_ui/src/res/l10n.dart';
 import 'package:fl_pi_llm_ui/src/store/memory.dart';
 import 'package:fl_pi_llm_ui/src/store/stores.dart';
@@ -78,7 +79,7 @@ class MemoryPage extends StatelessWidget {
     try {
       final key = MemoryStore.keyOf(res);
       return key.isEmpty ? null : key;
-    } on MemoryPathError catch (e) {
+    } on MemoryError catch (e) {
       Toast.show('$e');
       return null;
     }
@@ -99,7 +100,7 @@ class MemoryPage extends StatelessWidget {
     if (to == null || to == key) return;
     try {
       _store.move(key, to);
-    } on MemoryPathError catch (e) {
+    } on MemoryError catch (e) {
       Toast.show('$e');
     }
   }
@@ -145,7 +146,7 @@ class _MemoryFilePageState extends State<MemoryFilePage> {
       LlmStores.memory.write(widget._key, _ctrl.text);
       _saved.value = _ctrl.text;
       return true;
-    } on MemoryPathError catch (e) {
+    } on MemoryError catch (e) {
       Toast.show('$e');
       return false;
     }

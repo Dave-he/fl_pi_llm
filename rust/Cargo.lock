@@ -318,6 +318,7 @@ dependencies = [
  "anyhow",
  "flutter_rust_bridge",
  "getrandom",
+ "regex",
  "reqwest",
  "rquickjs",
  "serde_json",

@@ -4,6 +4,8 @@
 
 use std::sync::OnceLock;
 
+pub mod memory;
+
 use flutter_rust_bridge::frb;
 
 use crate::engine::{Engine, Inbound, Outbound};

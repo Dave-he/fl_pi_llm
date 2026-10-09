@@ -29,6 +29,11 @@ final class FlPiLlm {
 
   static Future<void>? _libInit;
 
+  /// Loads the native library: what [start] does first, and all that
+  /// [LlmMemory] needs. Only the first call's [externalLibrary] counts.
+  static Future<void> loadLibrary({ExternalLibrary? externalLibrary}) =>
+      _libInit ??= RustLib.init(externalLibrary: externalLibrary);
+
   /// Starts a runtime.
   ///
   /// [httpClient] is used for every request the models make; one is created
@@ -45,7 +50,7 @@ final class FlPiLlm {
     ExternalLibrary? externalLibrary,
     Map<String, String> Function()? environment,
   }) async {
-    await (_libInit ??= RustLib.init(externalLibrary: externalLibrary));
+    await loadLibrary(externalLibrary: externalLibrary);
     final rt = FlPiLlm._(
       httpClient ?? HttpClient(),
       logger,

@@ -4,14 +4,12 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api.dart';
-
+import 'api/memory.dart';
 import 'dart:async';
 import 'dart:convert';
-
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
-
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
@@ -67,7 +65,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1788945894;
+  int get rustContentHash => -262131904;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -108,6 +106,21 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Stream<HostMessage> crateApiLlmEngineStart({required LlmEngine that});
+
+  String crateApiMemoryMemoryKeyOf({required String path});
+
+  String? crateApiMemoryMemoryPrompt({
+    required String files,
+    required bool tools,
+  });
+
+  String crateApiMemoryMemoryRun({
+    required String files,
+    required String name,
+    required String args,
+  });
+
+  String crateApiMemoryMemoryTools();
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LlmEngine;
@@ -319,6 +332,111 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     debugName: "LlmEngine_start",
     argNames: ["that", "sink"],
   );
+
+  @override
+  String crateApiMemoryMemoryKeyOf({required String path}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiMemoryMemoryKeyOfConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMemoryMemoryKeyOfConstMeta =>
+      const TaskConstMeta(debugName: "memory_key_of", argNames: ["path"]);
+
+  @override
+  String? crateApiMemoryMemoryPrompt({
+    required String files,
+    required bool tools,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(files, serializer);
+          sse_encode_bool(tools, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiMemoryMemoryPromptConstMeta,
+        argValues: [files, tools],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMemoryMemoryPromptConstMeta => const TaskConstMeta(
+    debugName: "memory_prompt",
+    argNames: ["files", "tools"],
+  );
+
+  @override
+  String crateApiMemoryMemoryRun({
+    required String files,
+    required String name,
+    required String args,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(files, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(args, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiMemoryMemoryRunConstMeta,
+        argValues: [files, name, args],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMemoryMemoryRunConstMeta => const TaskConstMeta(
+    debugName: "memory_run",
+    argNames: ["files", "name", "args"],
+  );
+
+  @override
+  String crateApiMemoryMemoryTools() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiMemoryMemoryToolsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMemoryMemoryToolsConstMeta =>
+      const TaskConstMeta(debugName: "memory_tools", argNames: []);
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LlmEngine => wire

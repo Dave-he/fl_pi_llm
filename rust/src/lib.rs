@@ -4,6 +4,7 @@
 #[cfg(feature = "frb")]
 pub mod api;
 pub mod engine;
+pub mod memory;
 #[cfg(feature = "frb")]
 mod frb_generated;
 #[cfg(feature = "host")]
