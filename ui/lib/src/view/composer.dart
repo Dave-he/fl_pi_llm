@@ -147,42 +147,6 @@ class _ComposerState extends State<Composer> {
     }
   }
 
-  Future<void> _pickFiles() => _picking(() async {
-    final res = await FilePicker.pickFiles();
-    return [for (final f in res) ?f.path];
-  });
-
-  Future<void> _pickImage(ImageSource source) => _picking(() async {
-    final img = await ImagePicker().pickImage(source: source);
-    return [?img?.path];
-  });
-
-  /// A picker's paths, attached; its failure shown rather than lost.
-  Future<void> _picking(Future<List<String>> Function() pick) async {
-    try {
-      final paths = await pick();
-      if (paths.isNotEmpty) _files.value = [..._files.value, ...paths];
-    } catch (e, s) {
-      Loggers.app.warning('Pick attachment', e, s);
-      Toast.show('$e');
-    }
-  }
-
-  /// A file on a computer; on a phone, a file, a photo or the camera.
-  Widget _attachBtn() {
-    Widget btn(VoidCallback onTap) =>
-        Btn.icon(icon: const Icon(Icons.attach_file, size: _iconSize), text: llmL10n.attachment, onTap: onTap, padding: _btnPadding);
-    if (!isMobile) return btn(_pickFiles);
-    return MenuBtn(
-      actions: [
-        ContextMenuAction(text: libL10n.file, icon: Icons.insert_drive_file_outlined, onTap: _pickFiles),
-        ContextMenuAction(text: llmL10n.image, icon: Icons.image_outlined, onTap: () => _pickImage(ImageSource.gallery)),
-        ContextMenuAction(text: llmL10n.camera, icon: Icons.photo_camera_outlined, onTap: () => _pickImage(ImageSource.camera)),
-      ],
-      builder: btn,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = context.theme.colorScheme;
@@ -208,7 +172,7 @@ class _ComposerState extends State<Composer> {
         );
       }),
       actions: [
-        _attachBtn(),
+        AttachButton(onPicked: (paths) => _files.value = [..._files.value, ...paths]),
         Flexible(
           child: _ModelChip(chatId: widget.chatId, model: _model, onChanged: () => setState(() {})),
         ),
@@ -325,6 +289,50 @@ class ComposerBox extends StatelessWidget {
   }
 }
 
+/// Attach: a file on a computer; on a phone, a file, a photo or the camera.
+/// Hands what was picked to [onPicked], as paths; a picker's failure is shown
+/// rather than lost.
+class AttachButton extends StatelessWidget {
+  const AttachButton({super.key, required this.onPicked});
+
+  final void Function(List<String> paths) onPicked;
+
+  Future<void> _picking(Future<List<String>> Function() pick) async {
+    try {
+      final paths = await pick();
+      if (paths.isNotEmpty) onPicked(paths);
+    } catch (e, s) {
+      Loggers.app.warning('Pick attachment', e, s);
+      Toast.show('$e');
+    }
+  }
+
+  Future<void> _pickFiles() => _picking(() async {
+    final res = await FilePicker.pickFiles();
+    return [for (final f in res) ?f.path];
+  });
+
+  Future<void> _pickImage(ImageSource source) => _picking(() async {
+    final img = await ImagePicker().pickImage(source: source);
+    return [?img?.path];
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget btn(VoidCallback onTap) =>
+        Btn.icon(icon: const Icon(Icons.attach_file, size: _iconSize), text: llmL10n.attachment, onTap: onTap, padding: _btnPadding);
+    if (!isMobile) return btn(_pickFiles);
+    return MenuBtn(
+      actions: [
+        ContextMenuAction(text: libL10n.file, icon: Icons.insert_drive_file_outlined, onTap: _pickFiles),
+        ContextMenuAction(text: llmL10n.image, icon: Icons.image_outlined, onTap: () => _pickImage(ImageSource.gallery)),
+        ContextMenuAction(text: llmL10n.camera, icon: Icons.photo_camera_outlined, onTap: () => _pickImage(ImageSource.camera)),
+      ],
+      builder: btn,
+    );
+  }
+}
+
 /// The size of the icons in the row under the text, and around them.
 const double _iconSize = 16;
 const _btnPadding = EdgeInsets.all(5);
@@ -381,15 +389,10 @@ class _ModelChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = context.theme.colorScheme.primary;
     return Llm.providers.listenVal((_) {
       final name = Llm.info(model)?.name ?? model?.id ?? llmL10n.model;
-      return Btn.row(
-        icon: Icon(Icons.auto_awesome, size: _iconSize, color: primary),
-        text: name,
-        textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: primary, overflow: TextOverflow.ellipsis),
-        mainAxisSize: MainAxisSize.min,
-        padding: _btnPadding,
+      return ComposerModelChip(
+        name: name,
         onTap: () async {
           final picked = await pickModel(context, current: model);
           if (picked == null) return;
@@ -417,27 +420,64 @@ class _ThinkingChip extends StatefulWidget {
 }
 
 class _ThinkingChipState extends State<_ThinkingChip> {
+  @override
+  Widget build(BuildContext context) {
+    if (Llm.info(widget.model)?.reasoning != true) return UIs.placeholder;
+    return ComposerThinkingChip(
+      level: LlmStores.llm.thinkingLevel.get(),
+      levels: [for (final l in ThinkingLevel.values) l.name],
+      compact: widget.compact,
+      onPick: (name) async {
+        await Chats.setThinkingLevel(ThinkingLevel.values.byName(name));
+        if (mounted) setState(() {});
+      },
+    );
+  }
+}
+
+/// The model a message goes to, in a [ComposerBox]'s row: [onTap] picks
+/// another.
+class ComposerModelChip extends StatelessWidget {
+  const ComposerModelChip({super.key, required this.name, required this.onTap});
+
+  final String name;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = context.theme.colorScheme.primary;
+    return Btn.row(
+      icon: Icon(Icons.auto_awesome, size: _iconSize, color: primary),
+      text: name,
+      textStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: primary, overflow: TextOverflow.ellipsis),
+      mainAxisSize: MainAxisSize.min,
+      padding: _btnPadding,
+      onTap: onTap,
+    );
+  }
+}
+
+/// How hard the model thinks, in a [ComposerBox]'s row: [level] among
+/// [levels], a menu of them. An icon alone when [compact].
+class ComposerThinkingChip extends StatelessWidget {
+  const ComposerThinkingChip({super.key, required this.level, required this.levels, required this.onPick, this.compact = false});
+
+  final String level;
+  final List<String> levels;
+  final void Function(String level) onPick;
+  final bool compact;
 
   static String _label(String level) => level.isEmpty ? level : level[0].toUpperCase() + level.substring(1);
 
   @override
   Widget build(BuildContext context) {
-    if (Llm.info(widget.model)?.reasoning != true) return UIs.placeholder;
-    final level = LlmStores.llm.thinkingLevel.get();
     final cur = _label(level);
     return MenuBtn(
       actions: [
-        for (final l in ThinkingLevel.values)
-          ContextMenuAction(
-            text: _label(l.name),
-            checked: l.name == level,
-            onTap: () async {
-              await Chats.setThinkingLevel(l);
-              if (mounted) setState(() {});
-            },
-          ),
+        for (final l in levels)
+          ContextMenuAction(text: _label(l), checked: l == level, onTap: () => onPick(l)),
       ],
-      builder: (toggle) => widget.compact
+      builder: (toggle) => compact
           ? Btn.icon(
               icon: const Icon(Icons.psychology_outlined, size: _iconSize),
               text: '${llmL10n.thinkingEffort}: $cur',
