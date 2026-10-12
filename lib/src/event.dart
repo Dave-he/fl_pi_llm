@@ -90,13 +90,11 @@ extension type const LlmEntry(Map<String, Object?> json) {
 
 /// Something that happened in a session, as pi's harness reports it.
 ///
-/// [type] is one of `run_start`, `run_end`, `run_suspend`, `run_resume`,
-/// `turn_start`, `turn_end`, `message_start`, `message_update`,
-/// `message_end`, `tool_start`, `tool_update`, `tool_end`, `entry_added`,
-/// `retry_scheduled`, `retry_start`, `retry_end`, `compaction_start`,
-/// `compaction_end`, `navigation_start`, `navigation_end`, `usage`, `fault`,
-/// `operation_abort`, `handler_error`. For [FlPiLlm.complete] it is pi-ai's
-/// `AssistantMessageEvent` type instead.
+/// [type] is one of `run_start`, `run_end`, `turn_start`, `turn_end`,
+/// `message_start`, `message_update`, `message_end`, `tool_start`,
+/// `tool_update`, `tool_end`, `entry_added`, `retry_start`, `retry_end`,
+/// `compaction_start`, `compaction_end`, `usage`, `fault`. For
+/// [FlPiLlm.complete] it is pi-ai's `AssistantMessageEvent` type instead.
 final class LlmEvent {
   const LlmEvent(this.type, this.json);
 

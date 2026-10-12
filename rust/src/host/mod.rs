@@ -215,7 +215,7 @@ struct Inner {
     fatal: Mutex<Option<String>>,
 }
 
-/// pi-agent-core and pi-ai on QuickJS, answered by this process. One is
+/// pi-durable and pi-ai on QuickJS, answered by this process. One is
 /// enough for a program: sessions share it. Dropping the last handle stops it.
 #[derive(Clone)]
 pub struct Runtime(Arc<Inner>);
@@ -478,6 +478,14 @@ impl Session {
         self.call("session.setName", json!({ "name": name })).await?;
         self.name = name.map(str::to_string);
         Ok(())
+    }
+
+    /// The session as a file pi's coding agent reads (session format v3),
+    /// recorded as made in `cwd`: every version, the current one last, which
+    /// is where `pi` continues.
+    pub async fn export_pi(&self, cwd: &str) -> Result<String> {
+        let v = self.call("session.exportPi", json!({ "cwd": cwd })).await?;
+        Ok(v["text"].as_str().unwrap_or_default().to_string())
     }
 
     /// Compacts now, whatever the thresholds say. Answers the new branch.

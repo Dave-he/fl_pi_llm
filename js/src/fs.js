@@ -1,8 +1,9 @@
-// pi's `FileSystem`, over the host's session store.
+// pi-durable's `FileSystem`, over the host's session store.
 //
-// pi keeps a session as an append-only JSONL file and reaches it only through
-// an injected `FileSystem`. This is that filesystem, reduced to what the host
-// has to implement — seven calls on whole files keyed by path:
+// A chat is a pi-durable JSONL storage, a directory of append-only files that
+// pi reaches only through an injected `FileSystem`. This is that filesystem,
+// reduced to what the host has to implement — seven calls on whole text files
+// keyed by path:
 //
 //   fs.read   {path, maxLines?}  -> {text: string | null}
 //   fs.write  {path, text}
@@ -14,7 +15,7 @@
 //
 // Directories are not stored: one exists while a file under it does. Paths are
 // POSIX and absolute, rooted wherever the host decides.
-import { err, FileError, ok } from '@earendil-works/pi-agent-core';
+import { err, FileError, ok } from '@earendil-works/pi-durable/env';
 
 const host = globalThis.__host;
 const call = async (name, payload) => JSON.parse(await host.call(name, JSON.stringify(payload)));
@@ -31,6 +32,7 @@ function normalize(path) {
 
 const basename = (path) => path.slice(path.lastIndexOf('/') + 1);
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 const text = (content) => (typeof content === 'string' ? content : decoder.decode(content));
 
 function splitLines(s) {
@@ -65,18 +67,21 @@ async function stat(path) {
   return undefined;
 }
 
+async function readText(path) {
+  const { text: t } = await call('fs.read', { path });
+  if (t == null) throw notFound(path);
+  return t;
+}
+
 export const hostFileSystem = {
+  id: 'fl-host',
   cwd: '/',
 
   absolutePath: async (path) => ok(normalize(path.startsWith('/') ? path : `/${path}`)),
   canonicalPath: async (path) => ok(normalize(path)),
   joinPath: async (parts) => ok(normalize(parts.join('/'))),
 
-  readTextFile: (path) => attempt(path, async () => {
-    const { text: t } = await call('fs.read', { path });
-    if (t == null) throw notFound(path);
-    return t;
-  }),
+  readTextFile: (path) => attempt(path, () => readText(path)),
 
   readTextLines: (path, options) => attempt(path, async () => {
     const max = options?.maxLines;
@@ -87,9 +92,7 @@ export const hostFileSystem = {
   }),
 
   openTextLineReader: (path) => attempt(path, async () => {
-    const { text: t } = await call('fs.read', { path });
-    if (t == null) throw notFound(path);
-    const lines = splitLines(t);
+    const lines = splitLines(await readText(path));
     let i = 0;
     return {
       readLine: async () => ok(i < lines.length ? lines[i++] : undefined),
@@ -97,11 +100,26 @@ export const hostFileSystem = {
     };
   }),
 
-  readBinaryFile: async () => unsupported('Binary files'),
+  // The store keeps text: pi-durable's files are UTF-8 JSON lines.
+  readBinaryFile: (path) => attempt(path, async () => encoder.encode(await readText(path))),
+  openBinaryReader: async () => unsupported('Positional reads'),
 
   writeFile: (path, content) => attempt(path, () => call('fs.write', { path, text: text(content) }).then(() => undefined)),
   appendFile: (path, content) => attempt(path, () => call('fs.append', { path, text: text(content) }).then(() => undefined)),
   renameFile: (from, to) => attempt(from, () => call('fs.rename', { from, to }).then(() => undefined)),
+
+  // Only ever a torn tail cut back to a line boundary, so the bytes kept are
+  // whole characters.
+  truncateFile: (path, size) => attempt(path, async () => {
+    const bytes = encoder.encode(await readText(path));
+    if (bytes.length === size) return;
+    const next = new Uint8Array(size);
+    next.set(bytes.subarray(0, Math.min(size, bytes.length)));
+    await call('fs.write', { path, text: decoder.decode(next) });
+  }),
+
+  // Each call is durable once the host answers it.
+  flushFile: async () => ok(undefined),
 
   fileInfo: (path) => attempt(path, async () => {
     const info = await stat(normalize(path));

@@ -2,7 +2,7 @@
 name = "fl_pi_llm"
 version = "0.1.0"
 edition = "2024"
-description = "pi-agent-core and pi-ai on QuickJS, bridged to Dart"
+description = "pi-durable and pi-ai on QuickJS, bridged to Dart"
 license = "AGPL-3.0-only"
 
 

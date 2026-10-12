@@ -125,17 +125,31 @@ WHERE substr(path, 1, length(?1)) = ?1 GROUP BY path;
   int latestMtime() =>
       SqliteDb.instance.select('SELECT MAX(mtime) AS m FROM pi_chunks;').firstOrNull?['m'] as int? ?? 0;
 
-  /// The chat among [ids] the session file at [path] belongs to. pi names a
-  /// session `<created>_<encoded id>.jsonl`, and an id may itself contain
-  /// `_`, so it is matched rather than split out.
+  /// The chat among [ids] the file at [path] belongs to: a chat keeps its
+  /// storage in `/chats/<encoded id>/`. A session from before pi-durable is
+  /// `/sessions/<cwd>/<created>_<encoded id>.jsonl`, and an id may itself
+  /// contain `_`, so it is matched rather than split out (TODO: remove with
+  /// `js/src/legacy.js`).
   static String? chatIdOf(String path, Iterable<String> ids) {
-    final name = path.split('/').last;
+    final parts = path.split('/');
+    if (parts.length >= 3 && parts[1] == 'chats') {
+      final id = Uri.decodeComponent(parts[2]);
+      return ids.contains(id) ? id : null;
+    }
+    final name = parts.last;
     if (!name.endsWith('.jsonl')) return null;
     for (final id in ids) {
       if (name.endsWith('_${Uri.encodeComponent(id)}.jsonl')) return id;
     }
     return null;
   }
+
+  /// Whether [path] holds a chat's entries: its storage's main log, or a
+  /// session from before pi-durable. The rest (documents such as a partial
+  /// answer) says nothing a search should find.
+  static bool _holdsEntries(String path) =>
+      (path.startsWith('/chats/') && path.endsWith('/main.jsonl')) ||
+      (path.startsWith('/sessions/') && path.endsWith('.jsonl'));
 
   /// What was said in each file, lowercased, with the mtime and size it was
   /// read at: an append within the same millisecond still counts.
@@ -151,7 +165,10 @@ WHERE substr(path, 1, length(?1)) = ?1 GROUP BY path;
     final rows = SqliteDb.instance.select(
       'SELECT path, MAX(mtime) AS m, SUM(length(text)) AS n FROM pi_chunks GROUP BY path;',
     );
-    final mtimes = {for (final r in rows) r['path'] as String: '${r['m']}/${r['n']}'};
+    final mtimes = {
+      for (final r in rows)
+        if (_holdsEntries(r['path'] as String)) r['path'] as String: '${r['m']}/${r['n']}',
+    };
     _said.removeWhere((k, _) => !mtimes.containsKey(k));
     final stale = [
       for (final MapEntry(:key, :value) in mtimes.entries)
@@ -189,71 +206,31 @@ WHERE substr(path, 1, length(?1)) = ?1 GROUP BY path;
       }
     }
 
+    void said(Object? m) {
+      if (m is Map && (m['role'] == 'user' || m['role'] == 'assistant')) text(m['content']);
+    }
+
     for (final line in const LineSplitter().convert(log)) {
       if (line.isEmpty) continue;
       try {
         final v = json.decode(line);
+        // pi-durable: one commit per line, its entries among the writes.
+        if (v is Map && v['type'] == 'commit') {
+          for (final w in v['writes'] as List? ?? const []) {
+            if (w is! Map || w['type'] != 'entry') continue;
+            final model = (w['value'] as Map?)?['model'];
+            if (model is List) model.forEach(said);
+          }
+          continue;
+        }
+        // TODO: remove with `js/src/legacy.js`: pi-agent-core 0.87's log.
         for (final w in v is List ? v : [v]) {
-          if (w is! Map || w['kind'] != 'entry') continue;
-          final m = w['message'];
-          if (m is Map && (m['role'] == 'user' || m['role'] == 'assistant')) text(m['content']);
+          if (w is Map && w['kind'] == 'entry') said(w['message']);
         }
       } catch (_) {
-        // Not a line of writes: the header, or a torn line.
+        // A header, or a torn line.
       }
     }
     return sb.toString().toLowerCase();
-  }
-}
-
-/// pi's session log format (JSONL storage v4), where the app handles the
-/// files itself: syncing them between devices.
-abstract final class PiSessionLog {
-  /// Two diverged pi session logs (JSONL storage v4: a header line, then one
-  /// transaction of writes per line) joined: [local], then the entries and
-  /// usage rows only [remote] has, in its order, renumbered after local's.
-  ///
-  /// Their other writes (state such as the current leaf) stay local's: the
-  /// remote branch is there to switch to, and a join of two joined logs adds
-  /// nothing, so two devices settle instead of growing the log back and
-  /// forth. Null when the two are not the same v4 session.
-  static String? union(String local, String remote) {
-    try {
-      List<String> lines(String t) => [
-        for (final l in const LineSplitter().convert(t))
-          if (l.isNotEmpty) l,
-      ];
-      final l = lines(local), r = lines(remote);
-      if (l.isEmpty || r.isEmpty || l.first != r.first) return null;
-      final header = json.decode(l.first);
-      if (header is! Map || header['kind'] != 'header') return null;
-
-      List<Map<String, Object?>> writes(String line) {
-        final v = json.decode(line);
-        return [for (final w in (v is List ? v : [v])) (w as Map).cast<String, Object?>()];
-      }
-
-      final ids = <Object?>{};
-      var seq = 0;
-      for (final line in l.skip(1)) {
-        for (final w in writes(line)) {
-          if (w['kind'] == 'entry' || w['kind'] == 'usage') ids.add(w['id']);
-          if (w['seq'] case final int s when s > seq) seq = s;
-        }
-      }
-      final added = <String>[];
-      for (final line in r.skip(1)) {
-        final keep = [
-          for (final w in writes(line))
-            if ((w['kind'] == 'entry' || w['kind'] == 'usage') && ids.add(w['id'])) {...w, 'seq': ++seq},
-        ];
-        if (keep.isNotEmpty) added.add(json.encode(keep.length == 1 ? keep.first : keep));
-      }
-      if (added.isEmpty) return local;
-      return '${[...l, ...added].join('\n')}\n';
-    } catch (e) {
-      Loggers.app.warning('Join session logs', e);
-      return null;
-    }
   }
 }

@@ -18,7 +18,7 @@ import 'tool.dart';
 /// or `error`.
 typedef LlmLogger = void Function(String level, String message);
 
-/// The LLM runtime: pi-agent-core and pi-ai running in QuickJS, with the
+/// The LLM runtime: pi-durable and pi-ai running in QuickJS, with the
 /// network, the tools and the approvals on this side.
 ///
 /// One per app is enough — sessions are cheap and share it. HTTP goes through

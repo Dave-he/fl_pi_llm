@@ -234,7 +234,7 @@ fn runtime_info() {
     let mut h = Harness::new();
     let v = h.request("runtime.info", json!({}));
     assert_eq!(v["ok"], true, "{v}");
-    assert_eq!(v["value"]["piAgentCore"], "0.87.1");
+    assert_eq!(v["value"]["piDurable"], "1.1.0");
 }
 
 #[test]
@@ -271,11 +271,14 @@ fn prompt_streams_calls_tools_and_waits_for_approval() {
     assert_eq!(h.tool_calls[0]["args"]["tz"], "UTC");
 
     // Streamed: the deltas arrived spread out, not in one burst at the end.
+    // pi-durable commits a partial answer at most every 100 ms, so deltas
+    // that came closer together arrive as one.
     let deltas: Vec<Instant> = h.events.iter()
         .filter(|(_, e)| e["event"]["type"] == "message_update" && e["event"]["event"]["type"] == "text_delta")
         .map(|(t, _)| *t).collect();
-    assert_eq!(deltas.len(), 4);
-    assert!(deltas[3] - deltas[0] >= Duration::from_millis(300), "deltas not streamed: {:?}", deltas[3] - deltas[0]);
+    assert!(deltas.len() >= 3, "{}", deltas.len());
+    let spread = *deltas.last().unwrap() - deltas[0];
+    assert!(spread >= Duration::from_millis(200), "deltas not streamed: {spread:?}");
 
     let reqs = seen.lock().unwrap();
     assert_eq!(reqs.len(), 2);
@@ -406,4 +409,80 @@ fn the_catalog_is_pi_ais_and_custom_providers_join_it() {
     assert_eq!(mock["models"][0]["id"], "mock");
     let openai = providers.as_array().unwrap().iter().find(|p| p["id"] == "openai").unwrap();
     assert!(openai["models"].as_array().unwrap().iter().all(|m| m["contextWindow"].as_u64().unwrap() > 0));
+}
+
+/// A session pi-agent-core 0.87.1 wrote: "q1" with a tool call, "q2", then
+/// "q2" edited into "q2 edited", a custom entry, a compaction, and a name.
+/// TODO: remove with `js/src/legacy.js`.
+const LEGACY: &str = include_str!("fixtures/legacy-0.87.1.jsonl");
+
+#[test]
+fn a_legacy_session_moves_over_with_its_versions() {
+    let (url, _) = mock_server(Duration::from_millis(1));
+    let files = Files::default();
+    let old = "/sessions/----/2026-10-12T13-14-14-726Z_chat-1.jsonl".to_string();
+    files.lock().unwrap().insert(old.clone(), (LEGACY.to_string(), now_ms()));
+    let mut h = Harness::with_files(files.clone());
+    h.register(&url);
+
+    let listed = h.ok("sessions.list", json!({}));
+    assert_eq!(listed[0]["id"], "chat-1", "listed before it is moved");
+
+    let v = open(&mut h, "chat-1", model(&url), json!({}));
+    assert_eq!(v["name"], "Named");
+    // The branch it stood on: the edited one, where the compaction was made.
+    assert_eq!(
+        h.roles("chat-1"),
+        ["user", "assistant", "toolResult", "assistant", "user", "assistant", "custom", "compaction"],
+    );
+    let branch = h.ok("session.entries", json!({"sessionId":"chat-1"}));
+    let texts: Vec<String> = branch["entries"].as_array().unwrap().iter()
+        .filter(|e| e["message"]["role"] == "user")
+        .map(|e| e["message"]["content"][0]["text"].as_str().unwrap().to_string()).collect();
+    assert_eq!(texts, ["q1", "q2 edited"]);
+    let compaction = branch["entries"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(compaction["summary"], "summary of earlier", "{compaction}");
+    // The version the edit replaced is still there.
+    let tree = h.ok("session.tree", json!({"sessionId":"chat-1"}));
+    assert!(tree["entries"].as_array().unwrap().iter().any(|e| e["message"]["content"][0]["text"] == "q2"));
+    // Every entry still hangs off the one before it.
+    let ids: std::collections::HashSet<_> = tree["entries"].as_array().unwrap().iter().map(|e| e["id"].clone()).collect();
+    assert!(tree["entries"].as_array().unwrap().iter().all(|e| e["parentId"].is_null() || ids.contains(&e["parentId"])));
+
+    // The old file is gone; the chat goes on where it was.
+    assert!(!files.lock().unwrap().contains_key(&old));
+    h.ok("session.prompt", json!({"sessionId":"chat-1","text":"after"}));
+    assert_eq!(h.roles("chat-1").len(), 10);
+    h.ok("session.close", json!({"sessionId":"chat-1"}));
+    let listed = h.ok("sessions.list", json!({}));
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+}
+
+/// What `pi` reads: the session as a v3 file, every version kept, the one the
+/// chat stands on last.
+#[test]
+fn a_session_exports_as_a_pi_session_file() {
+    let (url, _) = mock_server(Duration::from_millis(1));
+    let mut h = Harness::mocked(&url);
+    open(&mut h, "x", model(&url), json!({}));
+    h.ok("session.prompt", json!({"sessionId":"x","text":"first"}));
+    h.ok("session.navigate", json!({"sessionId":"x","targetId":null}));
+    h.ok("session.prompt", json!({"sessionId":"x","text":"second"}));
+    h.ok("session.setName", json!({"sessionId":"x","name":"Named"}));
+    let text = h.ok("session.exportPi", json!({"sessionId":"x","cwd":"/home/u"}))["text"].as_str().unwrap().to_string();
+    let lines: Vec<Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(lines[0]["type"], "session");
+    assert_eq!(lines[0]["version"], 3);
+    assert_eq!(lines[0]["cwd"], "/home/u");
+    let messages: Vec<&Value> = lines.iter().filter(|l| l["type"] == "message").collect();
+    assert_eq!(messages.len(), 4, "{text}");
+    assert!(lines.iter().any(|l| l["type"] == "session_info" && l["name"] == "Named"));
+    // pi continues from the last line: the answer to "second".
+    let last = lines.last().unwrap();
+    assert_eq!(last["message"]["role"], "assistant", "{text}");
+    let parent = lines.iter().find(|l| l["id"] == last["parentId"]).unwrap();
+    assert_eq!(parent["message"]["content"][0]["text"], "second");
+    for l in &lines[1..] {
+        assert!(l["parentId"].is_null() || lines.iter().any(|o| o["id"] == l["parentId"]), "{l}");
+    }
 }

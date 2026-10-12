@@ -1,4 +1,4 @@
-/// pi-agent-core and pi-ai on QuickJS: agents, tools, streaming and
+/// pi-durable and pi-ai on QuickJS: agents, tools, streaming and
 /// compaction for Flutter apps.
 library;
 

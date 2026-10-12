@@ -139,7 +139,8 @@ async fn a_session_runs_its_tools_in_rust_and_survives_a_restart() {
             types.push(e["type"].as_str().unwrap_or_default().to_string());
         }
         assert!(types.contains(&"tool_start".to_string()) && types.contains(&"tool_end".to_string()), "{types:?}");
-        assert!(types.iter().filter(|t| *t == "message_update").count() >= 4, "{types:?}");
+        // The mock answers at once: each answer streams as one update.
+        assert!(types.iter().filter(|t| *t == "message_update").count() >= 1, "{types:?}");
 
         // The model was told the system prompt.
         assert_eq!(seen.lock().unwrap()[0]["messages"][0]["content"], "Be brief.");

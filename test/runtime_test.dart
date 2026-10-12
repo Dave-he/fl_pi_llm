@@ -155,7 +155,7 @@ void main() {
 
   test('info', () async {
     final info = await llm.info();
-    expect(info['piAgentCore'], '0.87.1');
+    expect(info['piDurable'], '1.1.0');
     expect(info['apis'], contains('anthropic-messages'));
   });
 
@@ -187,10 +187,13 @@ void main() {
     expect(entries.last.message!.text, 'It is 12:00.');
     expect(approvals.single.name, 'get_time');
     expect(calls.single.args, {'tz': 'UTC'});
-    expect(deltas.map((d) => d.$2), ['It ', 'is ', '12:00', '.']);
+    // pi-durable commits a partial answer at most every 100 ms: deltas sent
+    // closer together arrive as one.
+    expect(deltas.map((d) => d.$2).join(), 'It is 12:00.');
+    expect(deltas.length, greaterThanOrEqualTo(2));
     expect(
       deltas.last.$1.difference(deltas.first.$1),
-      greaterThanOrEqualTo(const Duration(milliseconds: 250)),
+      greaterThanOrEqualTo(const Duration(milliseconds: 150)),
       reason: 'the deltas should arrive as they are sent, not all at the end',
     );
     expect(types, containsAllInOrder(['run_start', 'tool_start', 'tool_end', 'run_end']));

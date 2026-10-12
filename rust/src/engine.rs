@@ -19,7 +19,7 @@ use rquickjs::{
     Context, Ctx, Exception, Function, Object, Persistent, Promise, Runtime, TypedArray, Value,
 };
 
-/// The bundle built from `js/`: pi-agent-core, pi-ai and the Web layer, as
+/// The bundle built from `js/`: pi-durable, pi-ai and the Web layer, as
 /// QuickJS bytecode compiled by `build.rs`. Empty on 32-bit targets.
 static BYTECODE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/fl_pi_llm.qbc"));
 

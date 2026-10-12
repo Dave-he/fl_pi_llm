@@ -3,7 +3,7 @@
 The LLM layer shared by [GPT Box](https://github.com/lollipopkit/flutter_gpt_box)
 and [Server Box](https://github.com/lollipopkit/flutter_server_box).
 
-It runs [pi](https://github.com/earendil-works/pi)'s `pi-agent-core` and
+It runs [pi](https://github.com/earendil-works/pi)'s `pi-durable` and
 `pi-ai` in QuickJS, and keeps everything that touches the outside world in
 Dart: the network, the tools, and the user's approval of a tool call. What that
 buys an app:
@@ -12,8 +12,10 @@ buys an app:
   Gemini — and anything that copies one of them.
 - An agent loop with tool calling, streamed token by token.
 - Tool calls that wait for the user: the run is suspended until the app answers.
-- Sessions as pi keeps them: a tree of entries, so an edited message is a new
-  branch rather than a rewrite, stored wherever the app says.
+- Durable sessions: every turn and tool call is committed before it is shown,
+  and a run cut off by a restart can be picked up. An edited message forks the
+  conversation rather than rewriting it, so every version stays. Stored
+  wherever the app says.
 - Compaction: once a conversation no longer fits the context window, the older
   part is summarised for the model; the originals stay in the session.
 - An upstream that is actively developed, rather than a protocol layer written

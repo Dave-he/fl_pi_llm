@@ -1,4 +1,4 @@
-//! fl_pi_llm: pi-agent-core and pi-ai on QuickJS, bridged to Dart ([`api`])
+//! fl_pi_llm: pi-durable and pi-ai on QuickJS, bridged to Dart ([`api`])
 //! or hosted by a Rust program ([`host`]).
 
 #[cfg(feature = "frb")]

@@ -4,3 +4,4 @@ rust/target/
 js/node_modules/
 js/meta.json
 .DS_Store
+build/
