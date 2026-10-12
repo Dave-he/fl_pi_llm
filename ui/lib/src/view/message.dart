@@ -554,7 +554,7 @@ class _ToolCardState extends State<_ToolCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            Tools.labelOf(widget.name),
+                            Tools.labelOf(widget.name, widget.args),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 13, height: 18 / 13, fontWeight: FontWeight.w500),

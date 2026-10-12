@@ -147,19 +147,6 @@ class _ComposerState extends State<Composer> {
     }
   }
 
-  /// Enter sends on a keyboard; Shift+Enter is a new line, and an Enter the
-  /// input method takes (to confirm what is being composed) is its own.
-  KeyEventResult _onKey(FocusNode _, KeyEvent e) {
-    if (e is! KeyDownEvent) return KeyEventResult.ignored;
-    if (e.logicalKey != LogicalKeyboardKey.enter && e.logicalKey != LogicalKeyboardKey.numpadEnter) {
-      return KeyEventResult.ignored;
-    }
-    if (HardwareKeyboard.instance.isShiftPressed || _ctrl.value.composing.isValid) return KeyEventResult.ignored;
-    unawaited(_send());
-    return KeyEventResult.handled;
-  }
-
-
   Future<void> _pickFiles() => _picking(() async {
     final res = await FilePicker.pickFiles();
     return [for (final f in res) ?f.path];
@@ -199,6 +186,99 @@ class _ComposerState extends State<Composer> {
   @override
   Widget build(BuildContext context) {
     final scheme = context.theme.colorScheme;
+    return ComposerBox(
+      controller: _ctrl,
+      focusNode: _focus,
+      hint: llmL10n.message,
+      onSubmit: _send,
+      top: _files.listenVal((files) {
+        if (files.isEmpty) return UIs.placeholder;
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 5,
+            children: [
+              for (final f in files)
+                InputChip(
+                  label: Text(f.split(RegExp(r'[/\\]')).last, style: UIs.text12),
+                  onDeleted: () => _files.value = [..._files.value]..remove(f),
+                ),
+            ],
+          ),
+        );
+      }),
+      actions: [
+        _attachBtn(),
+        Flexible(
+          child: _ModelChip(chatId: widget.chatId, model: _model, onChanged: () => setState(() {})),
+        ),
+        _ThinkingChip(model: _model, compact: widget.compact),
+        if (widget.chatId != null) _ToolsToggle(chatId: widget.chatId!),
+      ],
+      // The chat opens after the composer is built: follow it.
+      button: ListenableBuilder(
+        listenable: Chats.openChanges,
+        builder: (context, _) {
+          final id = widget.chatId;
+          final chat = id == null ? null : Chats.openOf(id);
+          return ListenableBuilder(
+            listenable: Listenable.merge([chat?.running ?? _idle, ?chat?.pendingInput]),
+            builder: (context, _) {
+              // A form waiting is answered by sending, not stopped.
+              final r = (chat?.running.value ?? false) && chat?.pendingInput.value == null;
+              return r
+                  ? ComposerButton.stop(scheme, onTap: () => Chats.abort(widget.chatId!))
+                  : ComposerButton.send(scheme, onTap: _send);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The box a message is written in: [top] (attachments, say), the field, a
+/// row of [actions] under it and [button] at the end of that row. [Composer]
+/// is it with a chat's attachments, model and tools; a host writing to a
+/// conversation of its own — one that runs elsewhere — uses the same box.
+///
+/// On a keyboard Enter submits and Shift+Enter is a new line; an Enter the
+/// input method takes, to confirm what is being composed, is its own.
+class ComposerBox extends StatelessWidget {
+  const ComposerBox({
+    super.key,
+    required this.controller,
+    required this.onSubmit,
+    required this.button,
+    this.focusNode,
+    this.hint,
+    this.top,
+    this.actions = const [],
+    this.enabled = true,
+  });
+
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final VoidCallback onSubmit;
+  final String? hint;
+  final Widget? top;
+  final List<Widget> actions;
+  final Widget button;
+  final bool enabled;
+
+  KeyEventResult _onKey(FocusNode _, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e.logicalKey != LogicalKeyboardKey.enter && e.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return KeyEventResult.ignored;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed || controller.value.composing.isValid) return KeyEventResult.ignored;
+    onSubmit();
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colorScheme;
     return Material(
       color: scheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(17),
@@ -207,36 +287,22 @@ class _ComposerState extends State<Composer> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _files.listenVal((files) {
-              if (files.isEmpty) return UIs.placeholder;
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 5,
-                  children: [
-                    for (final f in files)
-                      InputChip(
-                        label: Text(f.split(RegExp(r'[/\\]')).last, style: UIs.text12),
-                        onDeleted: () => _files.value = [..._files.value]..remove(f),
-                      ),
-                  ],
-                ),
-              );
-            }),
+            ?top,
             Focus(
               canRequestFocus: false,
               skipTraversal: true,
               onKeyEvent: isDesktop ? _onKey : null,
               child: TextField(
-                controller: _ctrl,
-                focusNode: _focus,
+                controller: controller,
+                focusNode: focusNode,
+                enabled: enabled,
                 minLines: 1,
                 maxLines: 8,
                 style: const TextStyle(fontSize: 14, height: 20 / 14),
                 textInputAction: isDesktop ? TextInputAction.newline : TextInputAction.send,
-                onSubmitted: isDesktop ? null : (_) => _send(),
+                onSubmitted: isDesktop ? null : (_) => onSubmit(),
                 decoration: bareInputDecoration(
-                  hintText: llmL10n.message,
+                  hintText: hint,
                   hintStyle: UIs.textGrey.copyWith(fontSize: 14, height: 20 / 14),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 7, vertical: 9),
@@ -247,49 +313,9 @@ class _ComposerState extends State<Composer> {
               children: [
                 // Its own row: a Flexible beside a Spacer would split the free
                 // space with it, and what the chip leaves of its half would
-                // end up after the send button.
-                Expanded(
-                  child: Row(
-                    children: [
-                      _attachBtn(),
-                      Flexible(
-                        child: _ModelChip(chatId: widget.chatId, model: _model, onChanged: () => setState(() {})),
-                      ),
-                      _ThinkingChip(model: _model, compact: widget.compact),
-                      if (widget.chatId != null) _ToolsToggle(chatId: widget.chatId!),
-                    ].joinWith(const SizedBox(width: 1)),
-                  ),
-                ),
-                // The chat opens after the composer is built: follow it.
-                ListenableBuilder(
-                  listenable: Chats.openChanges,
-                  builder: (context, _) {
-                    final id = widget.chatId;
-                    final chat = id == null ? null : Chats.openOf(id);
-                    return ListenableBuilder(
-                      listenable: Listenable.merge([chat?.running ?? _idle, ?chat?.pendingInput]),
-                      builder: (context, _) {
-                  // A form waiting is answered by sending, not stopped.
-                  final r = (chat?.running.value ?? false) && chat?.pendingInput.value == null;
-                  return r
-                      ? _CircleBtn(
-                          icon: Icons.stop_rounded,
-                          tooltip: libL10n.stop,
-                          color: scheme.secondaryContainer,
-                          onColor: scheme.onSecondaryContainer,
-                          onTap: () => Chats.abort(widget.chatId!),
-                        )
-                      : _CircleBtn(
-                          icon: Icons.arrow_upward,
-                          tooltip: llmL10n.send,
-                          color: scheme.primary,
-                          onColor: scheme.onPrimary,
-                          onTap: _send,
-                        );
-                      },
-                    );
-                  },
-                ),
+                // end up after the button.
+                Expanded(child: Row(children: actions.joinWith(const SizedBox(width: 1)))),
+                button,
               ],
             ),
           ],
@@ -299,32 +325,47 @@ class _ComposerState extends State<Composer> {
   }
 }
 
-
 /// The size of the icons in the row under the text, and around them.
 const double _iconSize = 16;
 const _btnPadding = EdgeInsets.all(5);
 
-/// Send, or stop: a 32 circle at the end of the row.
-class _CircleBtn extends StatelessWidget {
-  const _CircleBtn({required this.icon, required this.tooltip, required this.color, required this.onColor, required this.onTap});
+/// Send, or stop: a 32 circle at the end of a [ComposerBox]'s row.
+class ComposerButton extends StatelessWidget {
+  const ComposerButton({super.key, required this.icon, required this.tooltip, required this.color, required this.onColor, required this.onTap});
+
+  ComposerButton.send(ColorScheme scheme, {Key? key, required VoidCallback? onTap})
+    : this(key: key, icon: Icons.arrow_upward, tooltip: llmL10n.send, color: scheme.primary, onColor: scheme.onPrimary, onTap: onTap);
+
+  ComposerButton.stop(ColorScheme scheme, {Key? key, required VoidCallback? onTap})
+    : this(
+        key: key,
+        icon: Icons.stop_rounded,
+        tooltip: libL10n.stop,
+        color: scheme.secondaryContainer,
+        onColor: scheme.onSecondaryContainer,
+        onTap: onTap,
+      );
 
   final IconData icon;
   final String tooltip;
   final Color color;
   final Color onColor;
-  final VoidCallback onTap;
+
+  /// Null: dimmed, and no tap.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final off = onTap == null;
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: color,
+        color: off ? color.withValues(alpha: 0.38) : color,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: SizedBox(width: 32, height: 32, child: Icon(icon, size: 18, color: onColor)),
+          child: SizedBox(width: 32, height: 32, child: Icon(icon, size: 18, color: off ? onColor.withValues(alpha: 0.6) : onColor)),
         ),
       ),
     );

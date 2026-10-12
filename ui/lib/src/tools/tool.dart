@@ -117,9 +117,10 @@ abstract final class Tools {
 
   /// A tool's name as the user reads it: the built-in one's own, an MCP
   /// tool's as `server__tool` has it.
-  static String labelOf(String name) => internal(name)?.l10nName ?? McpTools.toolLabel(name) ?? name;
+  static String labelOf(String name, [Map<String, Object?> args = const {}]) =>
+      internal(name)?.l10nName ?? McpTools.toolLabel(name) ?? LlmUi.describeTool(name, args)?.label ?? name;
 
   /// A call's arguments on one line.
   static String summaryOf(String name, Map<String, Object?> args) =>
-      internal(name)?.summary(args) ?? jsonEncode(args);
+      internal(name)?.summary(args) ?? LlmUi.describeTool(name, args)?.summary ?? jsonEncode(args);
 }

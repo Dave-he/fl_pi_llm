@@ -42,6 +42,11 @@ abstract final class LlmUi {
   /// lets have them.
   static List<ToolFunc> Function() appTools = () => const [];
 
+  /// How a tool this app does not run is shown: one that ran elsewhere — on
+  /// a server, in a conversation shown here — its label and its call on one
+  /// line. Null for one this does not know.
+  static ({String label, String summary})? Function(String name, Map<String, Object?> args) describeTool = (_, _) => null;
+
   /// Whether a chat is offered the tools of [group] — a [ToolFunc.group], or
   /// [Tools.mcpGroup] for every MCP server's. A chat in a [ChatMeta.scope]
   /// that has a narrower job than the app's own list, say.
