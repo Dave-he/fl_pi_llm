@@ -14,6 +14,8 @@ import 'package:fl_pi_llm_ui/src/skills/source.dart';
 import 'package:fl_pi_llm_ui/src/tools/tool.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'library.dart';
+
 String _md(String name, [String description = 'Does a thing.', String body = 'Steps.']) =>
     '---\nname: $name\ndescription: $description\n---\n$body\n';
 
@@ -31,7 +33,10 @@ Uint8List _targz(Map<String, String> files, {String top = 'repo-main'}) {
 
 void main() {
   // Real sockets to the mock: `flutter test` stubs `HttpClient` otherwise.
-  setUpAll(() => HttpOverrides.global = null);
+  setUpAll(() async {
+    HttpOverrides.global = null;
+    await loadLlmLibrary();
+  });
 
   group('a source', () {
     SkillSource p(String s) => SkillSource.parse(s);
@@ -146,7 +151,7 @@ void main() {
     test('names made safe for a directory', () {
       expect(SkillDiscovery.dirName('My Skill: PDF!'), 'my-skill-pdf');
       expect(SkillDiscovery.dirName('../..'), 'unnamed-skill');
-      expect(SkillDiscovery.clean('a\n\x1B[31mb\x07'), 'a b');
+      expect(SkillDiscovery.parse('---\nname: "a\\n\\x1B[31mb\\x07"\ndescription: d\n---\n')?.name, 'a b');
     });
   });
 
@@ -413,7 +418,7 @@ void main() {
       await installAll('o/r');
       Skills.setEnabled('off', false);
 
-      final prompt = Skills.prompt('skill')!;
+      final prompt = Skills.prompt()!;
       expect(prompt, contains('- pdf: Fill PDF forms.'));
       expect(prompt, isNot(contains('off')));
 

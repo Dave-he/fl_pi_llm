@@ -85,8 +85,12 @@ It also has what the apps give a session: the memory (`host::memory`), MCP
 servers' tools over Streamable HTTP through the host's `Fetch`
 (`host::mcp`), and skills — `SKILL.md` folders, found and installed from
 GitHub as `npx skills add` does, listed in the system prompt and loaded with
-the `skill` tool (`host::skills`). Tool names and prompt words are the Dart
-side's, so a session reads the same in both.
+the `skill` tool (`host::skills`). What a skill is, where a source points,
+the `skill` tool, and what an MCP tool is called, says and answers are one
+implementation (`skills`, `mcp`, beside `memory`), which the apps reach over
+the bridge (`LlmSkills`, `LlmMcp`), so a session reads the same in both. The
+apps keep their own MCP client (mcp_dart, with sign-in through a browser) and
+fetch and install skills themselves.
 
 ## Layout
 

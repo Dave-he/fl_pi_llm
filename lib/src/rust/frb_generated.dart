@@ -4,7 +4,9 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api.dart';
+import 'api/mcp.dart';
 import 'api/memory.dart';
+import 'api/skills.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -65,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -262131904;
+  int get rustContentHash => 1694453731;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -107,6 +109,23 @@ abstract class RustLibApi extends BaseApi {
 
   Stream<HostMessage> crateApiLlmEngineStart({required LlmEngine that});
 
+  String crateApiMcpMcpCallResult({
+    required String tool,
+    required String result,
+  });
+
+  String? crateApiMcpMcpInstructions({required String servers});
+
+  String crateApiMcpMcpServerId({required String url});
+
+  String crateApiMcpMcpServerName({required String info, required String url});
+
+  String? crateApiMcpMcpTool({
+    required String serverId,
+    required String server,
+    required String tool,
+  });
+
   String crateApiMemoryMemoryKeyOf({required String path});
 
   String? crateApiMemoryMemoryPrompt({
@@ -121,6 +140,41 @@ abstract class RustLibApi extends BaseApi {
   });
 
   String crateApiMemoryMemoryTools();
+
+  String crateApiSkillsSkillDirName({required String name});
+
+  List<String> crateApiSkillsSkillFiles({
+    required String root,
+    required String dir,
+  });
+
+  String crateApiSkillsSkillFind({
+    required List<String> paths,
+    required String mds,
+    String? path,
+  });
+
+  bool crateApiSkillsSkillIsMd({required String path});
+
+  String? crateApiSkillsSkillParse({required String md});
+
+  String? crateApiSkillsSkillPrompt({required String offered});
+
+  String? crateApiSkillsSkillRead({
+    required String root,
+    required String dir,
+    required String file,
+  });
+
+  String crateApiSkillsSkillRun({
+    required String root,
+    required String offered,
+    required String args,
+  });
+
+  String crateApiSkillsSkillSourceParse({required String input});
+
+  String crateApiSkillsSkillTool();
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LlmEngine;
@@ -334,13 +388,145 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  String crateApiMcpMcpCallResult({
+    required String tool,
+    required String result,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(tool, serializer);
+          sse_encode_String(result, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiMcpMcpCallResultConstMeta,
+        argValues: [tool, result],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMcpMcpCallResultConstMeta => const TaskConstMeta(
+    debugName: "mcp_call_result",
+    argNames: ["tool", "result"],
+  );
+
+  @override
+  String? crateApiMcpMcpInstructions({required String servers}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(servers, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiMcpMcpInstructionsConstMeta,
+        argValues: [servers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMcpMcpInstructionsConstMeta =>
+      const TaskConstMeta(debugName: "mcp_instructions", argNames: ["servers"]);
+
+  @override
+  String crateApiMcpMcpServerId({required String url}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(url, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiMcpMcpServerIdConstMeta,
+        argValues: [url],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMcpMcpServerIdConstMeta =>
+      const TaskConstMeta(debugName: "mcp_server_id", argNames: ["url"]);
+
+  @override
+  String crateApiMcpMcpServerName({required String info, required String url}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(info, serializer);
+          sse_encode_String(url, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiMcpMcpServerNameConstMeta,
+        argValues: [info, url],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMcpMcpServerNameConstMeta => const TaskConstMeta(
+    debugName: "mcp_server_name",
+    argNames: ["info", "url"],
+  );
+
+  @override
+  String? crateApiMcpMcpTool({
+    required String serverId,
+    required String server,
+    required String tool,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(serverId, serializer);
+          sse_encode_String(server, serializer);
+          sse_encode_String(tool, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiMcpMcpToolConstMeta,
+        argValues: [serverId, server, tool],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMcpMcpToolConstMeta => const TaskConstMeta(
+    debugName: "mcp_tool",
+    argNames: ["serverId", "server", "tool"],
+  );
+
+  @override
   String crateApiMemoryMemoryKeyOf({required String path}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(path, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -367,7 +553,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(files, serializer);
           sse_encode_bool(tools, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -398,7 +584,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(files, serializer);
           sse_encode_String(name, serializer);
           sse_encode_String(args, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -422,7 +608,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -437,6 +623,263 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiMemoryMemoryToolsConstMeta =>
       const TaskConstMeta(debugName: "memory_tools", argNames: []);
+
+  @override
+  String crateApiSkillsSkillDirName({required String name}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillDirNameConstMeta,
+        argValues: [name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillDirNameConstMeta =>
+      const TaskConstMeta(debugName: "skill_dir_name", argNames: ["name"]);
+
+  @override
+  List<String> crateApiSkillsSkillFiles({
+    required String root,
+    required String dir,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_String(dir, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillFilesConstMeta,
+        argValues: [root, dir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillFilesConstMeta =>
+      const TaskConstMeta(debugName: "skill_files", argNames: ["root", "dir"]);
+
+  @override
+  String crateApiSkillsSkillFind({
+    required List<String> paths,
+    required String mds,
+    String? path,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_String(paths, serializer);
+          sse_encode_String(mds, serializer);
+          sse_encode_opt_String(path, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSkillsSkillFindConstMeta,
+        argValues: [paths, mds, path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillFindConstMeta => const TaskConstMeta(
+    debugName: "skill_find",
+    argNames: ["paths", "mds", "path"],
+  );
+
+  @override
+  bool crateApiSkillsSkillIsMd({required String path}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillIsMdConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillIsMdConstMeta =>
+      const TaskConstMeta(debugName: "skill_is_md", argNames: ["path"]);
+
+  @override
+  String? crateApiSkillsSkillParse({required String md}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(md, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillParseConstMeta,
+        argValues: [md],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillParseConstMeta =>
+      const TaskConstMeta(debugName: "skill_parse", argNames: ["md"]);
+
+  @override
+  String? crateApiSkillsSkillPrompt({required String offered}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(offered, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSkillsSkillPromptConstMeta,
+        argValues: [offered],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillPromptConstMeta =>
+      const TaskConstMeta(debugName: "skill_prompt", argNames: ["offered"]);
+
+  @override
+  String? crateApiSkillsSkillRead({
+    required String root,
+    required String dir,
+    required String file,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_String(dir, serializer);
+          sse_encode_String(file, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillReadConstMeta,
+        argValues: [root, dir, file],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillReadConstMeta => const TaskConstMeta(
+    debugName: "skill_read",
+    argNames: ["root", "dir", "file"],
+  );
+
+  @override
+  String crateApiSkillsSkillRun({
+    required String root,
+    required String offered,
+    required String args,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_String(offered, serializer);
+          sse_encode_String(args, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSkillsSkillRunConstMeta,
+        argValues: [root, offered, args],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillRunConstMeta => const TaskConstMeta(
+    debugName: "skill_run",
+    argNames: ["root", "offered", "args"],
+  );
+
+  @override
+  String crateApiSkillsSkillSourceParse({required String input}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(input, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillSourceParseConstMeta,
+        argValues: [input],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillSourceParseConstMeta =>
+      const TaskConstMeta(debugName: "skill_source_parse", argNames: ["input"]);
+
+  @override
+  String crateApiSkillsSkillTool() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSkillsSkillToolConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSkillsSkillToolConstMeta =>
+      const TaskConstMeta(debugName: "skill_tool", argNames: []);
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LlmEngine => wire
@@ -530,6 +973,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlatformInt64 dco_decode_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeI64(raw);
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
   }
 
   @protected
@@ -672,6 +1121,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -833,6 +1294,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
   }
 
   @protected

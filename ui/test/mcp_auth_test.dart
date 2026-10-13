@@ -6,10 +6,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:fl_pi_llm/fl_pi_llm.dart';
 import 'package:fl_pi_llm_ui/src/config.dart';
 import 'package:fl_pi_llm_ui/src/store/stores.dart';
 import 'package:fl_pi_llm_ui/src/tools/tool.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'library.dart';
 
 /// What the mock accepts, and what it saw.
 final class _Mock {
@@ -134,6 +137,25 @@ final class _Mock {
           },
         ],
       },
+      'tools/call' => switch ((msg['params'] as Map)['arguments']) {
+        {'fail': true} => {
+          'content': [
+            {'type': 'text', 'text': 'no echo'},
+          ],
+          'isError': true,
+        },
+        final Map args => {
+          'content': [
+            {'type': 'text', 'text': '${args['text']}'},
+            {
+              'type': 'resource',
+              'resource': {'uri': 'file:///x', 'text': 'x'},
+            },
+          ],
+          'structuredContent': {'ok': true},
+        },
+        _ => null,
+      },
       _ => null,
     };
     return _json(req, {
@@ -168,7 +190,8 @@ void main() {
   late _Mock mock;
 
   // Real sockets to the mock: `flutter test` stubs `HttpClient` otherwise.
-  setUpAll(() {
+  setUpAll(() async {
+    await loadLlmLibrary();
     HttpOverrides.global = null;
     LlmUi.appName = 'Test App';
     LlmUi.appUri = Uri.parse('https://app.example/');
@@ -293,8 +316,19 @@ void main() {
     expect(dark.first.svg, isTrue);
     expect('${dark[3].uri}', '${mock.base}/favicon.ico');
     expect('${McpTools.iconsOf(id, dark: false).first.uri}', startsWith('data:'));
-    expect(McpTools.serverOfTool(McpTools.toolName(id, 'echo')), id);
+    final echo = McpTools.llmTools.singleWhere((t) => t.label?.endsWith('echo') ?? false);
+    expect(echo.name, '${id}__echo');
+    expect(McpTools.serverOfTool(echo.name), id);
     expect(McpTools.serverOfTool('memory_read'), isNull);
+
+    // A call's answer as pi content, and the tool's own error as a failure.
+    LlmToolCall call(Map<String, Object?> args) => LlmToolCall(sessionId: 's', id: 'c', name: echo.name, args: args);
+    final res = await echo.execute(call({'text': 'hi'}), LlmCancelToken());
+    expect([for (final p in res.content) p['text']], ['hi', '[file:///x]\nx']);
+    await expectLater(
+      echo.execute(call({'fail': true}), LlmCancelToken()),
+      throwsA(isA<StateError>().having((e) => e.message, 'message', 'no echo')),
+    );
   });
 
   test('a stored server connects at launch, and asks for a sign-in', () async {

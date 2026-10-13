@@ -682,7 +682,7 @@ abstract final class Chats {
       _noticePrompt,
       if (Tools.memoryOn) ?TfMemory.prompt(tools: tools),
       if (tools) ?McpTools.instructions,
-      if (Tools.skillsOffered(meta)) ?Skills.prompt(TfSkill.instance.name),
+      if (Tools.skillsOffered(meta)) ?Skills.prompt(),
     ].where((e) => e.isNotEmpty).join('\n\n');
   }
 

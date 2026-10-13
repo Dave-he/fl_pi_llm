@@ -4,7 +4,9 @@
 
 use std::sync::OnceLock;
 
+pub mod mcp;
 pub mod memory;
+pub mod skills;
 
 use flutter_rust_bridge::frb;
 

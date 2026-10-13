@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:fl_lib/fl_lib.dart';
+import 'package:fl_pi_llm/fl_pi_llm.dart';
 import 'package:fl_pi_llm_ui/src/skills/discover.dart';
 import 'package:fl_pi_llm_ui/src/skills/fetch.dart';
 import 'package:fl_pi_llm_ui/src/skills/source.dart';
@@ -100,9 +101,6 @@ abstract final class Skills {
   /// A skill's files past these are refused, as the CLI refuses an archive.
   static const maxSkillBytes = 25 * 1024 * 1024;
   static const maxSkillFiles = 1000;
-
-  /// What the model is given of a file at once.
-  static const maxReadChars = 256 * 1024;
 
   static String? _root;
 
@@ -367,27 +365,11 @@ abstract final class Skills {
   }
 
   /// [dir]'s files, relative to it, SKILL.md first.
-  static List<String> filesOf(String dir) {
-    final d = Directory('$root/$dir');
-    if (!d.existsSync()) return const [];
-    final files = [
-      for (final f in d.listSync(recursive: true).whereType<File>())
-        f.path.substring(d.path.length + 1).replaceAll(r'\', '/'),
-    ]..sort();
-    return [if (files.remove('SKILL.md')) 'SKILL.md', ...files];
-  }
+  static List<String> filesOf(String dir) => LlmSkills.files(root, dir);
 
-  /// [file] of [dir] as text; null when there is no such file in it.
-  static String? read(String dir, [String file = 'SKILL.md']) {
-    final f = File('$root/$dir/$file');
-    if (!_inside('$root/$dir', f.path) || !f.existsSync()) return null;
-    final bytes = f.readAsBytesSync();
-    try {
-      return utf8.decode(bytes);
-    } catch (_) {
-      return null;
-    }
-  }
+  /// [file] of [dir] as text; null when there is no such text file in it (a
+  /// link out of it included).
+  static String? read(String dir, [String file = 'SKILL.md']) => LlmSkills.read(root, dir, file);
 
   /// Whether [path] is under [dir], after `..` and the like are resolved.
   static bool _inside(String dir, String path) {
@@ -397,18 +379,9 @@ abstract final class Skills {
   }
 
   /// The skills part of the system prompt: what each is for, the model to
-  /// load one with [toolName] when a task matches it. Null with none on.
-  static String? prompt(String toolName) {
-    final on = enabled;
-    if (on.isEmpty) return null;
-    final list = [
-      for (final s in on) '- ${s.dir}: ${s.description.length > 1024 ? '${s.description.substring(0, 1024)}…' : s.description}',
-    ].join('\n');
-    return '''# Skills
+  /// load one with the `skill` tool when a task matches it. Null with none on.
+  static String? prompt() => LlmSkills.prompt(offered);
 
-Skills are instructions for particular tasks that the user installed. When a task matches a skill's description, load the skill with the `$toolName` tool before starting the task, and follow it. A skill may point to its other files by relative path; read those with the same tool when you need them. Scripts in a skill cannot run here unless another tool can run them.
-
-Available skills:
-$list''';
-  }
+  /// The ones switched on, as the prompt and the `skill` tool offer them.
+  static List<LlmSkill> get offered => [for (final s in enabled) (dir: s.dir, name: s.name, description: s.description)];
 }

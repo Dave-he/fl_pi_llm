@@ -2,10 +2,8 @@
 //! transport (MCP 2025-06-18), its requests made through the host's
 //! [`Fetch`], and each tool a server lists as a [`Tool`] the model may call.
 //!
-//! What a tool is called, and what its answer becomes, is what the Dart side
-//! (`ui/lib/src/tools/mcp.dart`) does, so a session reads the same in both:
-//! `<server id>__<tool>`, the id made from the server's address ([`server_id`]),
-//! and text, images and resources passed on as pi content.
+//! What a tool is called, and what its answer becomes, is [`crate::mcp`],
+//! which the apps use too, so a session reads the same in both.
 //!
 //! Only what a host that holds a token needs: headers sent with every
 //! request (`Authorization: Bearer …`). Signing in through a browser (OAuth)
@@ -19,18 +17,16 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use super::{BoxFuture, Cancel, Fetch, FetchRequest, Tool, ToolCall, ToolDef, ToolResult};
+pub use crate::mcp::{McpTool, server_id, tool_name};
+use crate::mcp::{call_result, server_instructions, server_name};
 
 /// The protocol version asked for; the server answers the one it speaks.
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
-/// Providers take tool names of at most this many characters.
-const MAX_NAME: usize = 64;
 /// A request's answer, at most: a tool may run long (a backup, a scan).
 const CALL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const LIST_TIMEOUT: Duration = Duration::from_secs(30);
 /// What one answer may be, read off the wire.
 const MAX_BODY: usize = 16 << 20;
-/// What the system prompt carries of a server's instructions.
-const MAX_INSTRUCTIONS: usize = 4000;
 /// Tools listed of one server, at most: pages are followed this far.
 const MAX_TOOLS: usize = 256;
 
@@ -39,22 +35,6 @@ const MAX_TOOLS: usize = 256;
 pub struct McpServerConfig {
     pub url: String,
     pub headers: Vec<(String, String)>,
-}
-
-/// A tool as the server lists it.
-#[derive(Debug, Clone)]
-pub struct McpTool {
-    pub name: String,
-    pub title: Option<String>,
-    pub description: Option<String>,
-    /// JSON Schema of the arguments.
-    pub input_schema: Value,
-    /// `annotations.readOnlyHint`: says it changes nothing. A hint from the
-    /// server, not a guarantee.
-    pub read_only: bool,
-    /// `annotations.destructiveHint`, `true` unless said otherwise for a tool
-    /// that is not read-only, as the specification has it.
-    pub destructive: bool,
 }
 
 /// A connected server.
@@ -73,43 +53,6 @@ pub struct McpClient {
 struct Session {
     id: Option<String>,
     version: Option<String>,
-}
-
-/// FNV-1a over UTF-16 code units, as the Dart side hashes: stable across runs.
-fn fnv(s: &str) -> String {
-    let mut h: u32 = 0x811c9dc5;
-    for c in s.encode_utf16() {
-        h = (h ^ u32::from(c)).wrapping_mul(0x01000193);
-    }
-    format!("{h:08x}")
-}
-
-/// The id a server's tools are prefixed with: from its address, so it stays
-/// the same across starts and when another server is removed.
-pub fn server_id(url: &str) -> String {
-    format!("mcp{}", fnv(url))
-}
-
-/// A tool's name as the model sees it: `[a-zA-Z0-9_-]`, at most 64, and two
-/// servers may both have a `search`.
-pub fn tool_name(server_id: &str, tool: &str) -> String {
-    let n: String =
-        format!("{server_id}__{tool}").chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
-    if n.len() <= MAX_NAME {
-        return n;
-    }
-    format!("{}_{}", &n[..MAX_NAME - 9], fnv(tool))
-}
-
-fn host_of(url: &str) -> String {
-    url.split_once("://").map_or(url, |(_, r)| r).split(['/', '?', '#']).next().unwrap_or(url).to_string()
-}
-
-fn cap(s: &str, n: usize) -> String {
-    match s.char_indices().nth(n) {
-        Some((at, _)) => format!("{}…", &s[..at]),
-        None => s.to_string(),
-    }
 }
 
 /// An answer that is not the one asked for: why, for the caller to say.
@@ -132,18 +75,15 @@ impl McpClient {
     pub async fn connect(fetch: Arc<dyn Fetch>, config: McpServerConfig) -> Result<Self, String> {
         let mut client = Self {
             fetch,
-            name: host_of(&config.url),
+            name: crate::mcp::host_of(&config.url),
             config,
             next_id: AtomicU64::new(1),
             session: Mutex::new(Session::default()),
             instructions: None,
         };
         let info = client.initialize().await?;
-        if let Some(name) = info["serverInfo"]["title"].as_str().or(info["serverInfo"]["name"].as_str()).filter(|n| !n.trim().is_empty()) {
-            client.name = name.trim().to_string();
-        }
-        client.instructions =
-            info["instructions"].as_str().map(str::trim).filter(|s| !s.is_empty()).map(|s| cap(s, MAX_INSTRUCTIONS));
+        client.name = server_name(&info, &client.config.url);
+        client.instructions = server_instructions(info["instructions"].as_str());
         Ok(client)
     }
 
@@ -182,21 +122,7 @@ impl McpClient {
                 None => json!({}),
             };
             let page = self.request("tools/list", params, LIST_TIMEOUT, &Cancel::new()).await?;
-            for t in page["tools"].as_array().into_iter().flatten() {
-                let Some(name) = t["name"].as_str() else { continue };
-                let read_only = t["annotations"]["readOnlyHint"].as_bool() == Some(true);
-                tools.push(McpTool {
-                    name: name.to_string(),
-                    title: t["title"].as_str().or(t["annotations"]["title"].as_str()).map(String::from),
-                    description: t["description"].as_str().map(String::from),
-                    input_schema: match &t["inputSchema"] {
-                        Value::Object(_) => t["inputSchema"].clone(),
-                        _ => json!({ "type": "object" }),
-                    },
-                    read_only,
-                    destructive: !read_only && t["annotations"]["destructiveHint"].as_bool() != Some(false),
-                });
-            }
+            tools.extend(page["tools"].as_array().into_iter().flatten().filter_map(McpTool::from_json));
             cursor = page["nextCursor"].as_str().filter(|c| !c.is_empty()).map(String::from);
             if cursor.is_none() || tools.len() >= MAX_TOOLS {
                 tools.truncate(MAX_TOOLS);
@@ -210,17 +136,8 @@ impl McpClient {
     pub async fn call(&self, tool: &str, args: Value, cancel: &Cancel) -> Result<ToolResult, String> {
         let args = if args.is_object() { args } else { json!({}) };
         let res = self.request("tools/call", json!({ "name": tool, "arguments": args }), CALL_TIMEOUT, cancel).await?;
-        let mut content: Vec<Value> = res["content"].as_array().into_iter().flatten().map(part).collect();
-        if content.is_empty()
-            && let Some(structured) = res.get("structuredContent").filter(|v| !v.is_null())
-        {
-            content.push(json!({ "type": "text", "text": structured.to_string() }));
-        }
-        if res["isError"].as_bool() == Some(true) {
-            let text: Vec<&str> = content.iter().filter_map(|p| p["text"].as_str()).collect();
-            return Err(if text.is_empty() { format!("{tool} failed") } else { text.join("\n") });
-        }
-        Ok(ToolResult { content, details: res.get("structuredContent").cloned().unwrap_or(Value::Null), terminate: false })
+        let (content, details) = call_result(tool, &res)?;
+        Ok(ToolResult { content, details, terminate: false })
     }
 
     /// A request, its session started again once when the server forgot it.
@@ -297,7 +214,7 @@ impl McpClient {
         if !(200..300).contains(&res.status) {
             let body = read_all(&mut res.body).await.unwrap_or_default();
             let text = String::from_utf8_lossy(&body);
-            return Err(Failure::Other(format!("HTTP {} {}", res.status, cap(text.trim(), 300))));
+            return Err(Failure::Other(format!("HTTP {} {}", res.status, crate::mcp::cap(text.trim(), 300))));
         }
         let Some(id) = id else { return Ok(None) };
         if content_type.starts_with("text/event-stream") {
@@ -372,30 +289,6 @@ fn split_event(buf: &str) -> Option<(&str, &str)> {
     buf.find("\n\n").map(|at| (&buf[..at], &buf[at + 2..]))
 }
 
-/// An MCP content part as pi content.
-fn part(c: &Value) -> Value {
-    let text = |t: String| json!({ "type": "text", "text": t });
-    match c["type"].as_str() {
-        Some("text") => text(c["text"].as_str().unwrap_or_default().to_string()),
-        Some("image") => json!({ "type": "image", "data": c["data"], "mimeType": c["mimeType"] }),
-        Some("audio") => text(format!("[Audio: {}, not shown]", c["mimeType"].as_str().unwrap_or("?"))),
-        Some("resource") => {
-            let r = &c["resource"];
-            let uri = r["uri"].as_str().unwrap_or("?");
-            match r["text"].as_str() {
-                Some(t) => text(format!("[{uri}]\n{t}")),
-                None => text(format!("[Resource: {uri}, binary, not shown]")),
-            }
-        }
-        Some("resource_link") => {
-            let name = c["title"].as_str().or(c["name"].as_str()).unwrap_or("link");
-            let description = c["description"].as_str().map(|d| format!(" {d}")).unwrap_or_default();
-            text(format!("[{name}]({}){description}", c["uri"].as_str().unwrap_or("")))
-        }
-        _ => text(c.to_string()),
-    }
-}
-
 /// One tool of a connected server, as the model calls it.
 pub struct McpToolHandle {
     pub client: Arc<McpClient>,
@@ -412,16 +305,15 @@ impl McpToolHandle {
 
     /// `server · tool`, as a person reads it.
     pub fn label(&self) -> String {
-        format!("{} · {}", self.client.name, self.tool.title.as_deref().unwrap_or(&self.tool.name))
+        self.tool.label_for(&self.client.name)
     }
 }
 
 impl Tool for McpToolHandle {
     fn def(&self) -> ToolDef {
-        let about = self.tool.description.as_deref().or(self.tool.title.as_deref()).unwrap_or("");
         ToolDef {
             name: tool_name(&self.server_id, &self.tool.name),
-            description: format!("[{}] {about}", self.client.name).trim().to_string(),
+            description: self.tool.description_for(&self.client.name),
             parameters: self.tool.input_schema.clone(),
             label: Some(self.label()),
             sequential: false,
@@ -436,12 +328,8 @@ impl Tool for McpToolHandle {
 /// What connected servers say about using them, for the system prompt; None
 /// when none says anything.
 pub fn instructions(clients: &[Arc<McpClient>]) -> Option<String> {
-    let parts: Vec<String> =
-        clients.iter().filter_map(|c| c.instructions.as_ref().map(|i| format!("## {}\n\n{i}", c.name))).collect();
-    if parts.is_empty() {
-        return None;
-    }
-    Some(format!("# MCP servers\n\nInstructions from the MCP servers whose tools you have:\n\n{}", parts.join("\n\n")))
+    let servers: Vec<(String, String)> = clients.iter().filter_map(|c| Some((c.name.clone(), c.instructions.clone()?))).collect();
+    crate::mcp::instructions(&servers)
 }
 
 #[cfg(test)]
@@ -587,17 +475,5 @@ mod tests {
         assert_eq!(client.list_tools().await.unwrap().len(), 2);
         let methods: Vec<String> = fake.seen.lock().unwrap().iter().map(|(_, m)| m["method"].as_str().unwrap().to_string()).collect();
         assert_eq!(methods[2..5], ["tools/list", "initialize", "notifications/initialized"]);
-    }
-
-    #[test]
-    fn names_are_what_the_dart_side_makes() {
-        // `McpTools.nameFor` / `toolName` in ui/lib/src/tools/mcp.dart.
-        assert_eq!(fnv(""), "811c9dc5");
-        assert_eq!(fnv("a"), "e40c292c");
-        let long = "x".repeat(80);
-        let name = tool_name("mcp12345678", &long);
-        assert_eq!(name.len(), MAX_NAME);
-        assert!(name.ends_with(&format!("_{}", fnv(&long))));
-        assert_eq!(tool_name("mcp1", "a.b c"), "mcp1__a_b_c");
     }
 }

@@ -1,23 +1,13 @@
-import 'dart:io';
-
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_pi_llm_ui/fl_pi_llm_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The library `cargo build` leaves in `rust/target/debug`.
-ExternalLibrary _library() {
-  final name = Platform.isMacOS
-      ? 'libfl_pi_llm.dylib'
-      : Platform.isWindows
-      ? 'fl_pi_llm.dll'
-      : 'libfl_pi_llm.so';
-  return ExternalLibrary.open('../rust/target/debug/$name');
-}
+import 'library.dart';
 
 void main() {
   late MemoryStore mem;
 
-  setUpAll(() => FlPiLlm.loadLibrary(externalLibrary: _library()));
+  setUpAll(loadLlmLibrary);
 
   setUp(() {
     SqliteDb.openInMemory();

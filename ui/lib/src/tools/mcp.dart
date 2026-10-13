@@ -8,6 +8,9 @@ final class _McpServer {
   McpClient? client;
   Transport? transport;
   List<Tool> tools = const [];
+
+  /// [tools] as the model sees them, made when they are listed.
+  List<(Tool, LlmMcpTool)> defs = const [];
   bool connected = false;
   String? error;
   Timer? retry;
@@ -27,7 +30,10 @@ final class _McpServer {
   Completer<void>? signingIn;
 
   /// What the server calls itself; its host until it has said.
-  String get label => client?.getServerVersion()?.name ?? Uri.tryParse(url)?.host ?? url;
+  String get label {
+    final v = client?.getServerVersion();
+    return LlmMcp.serverName(v == null ? null : {'name': v.name, 'title': ?v.title}, url);
+  }
 }
 
 /// An image an MCP server or tool may be shown with.
@@ -47,11 +53,6 @@ abstract final class McpTools {
   static const _retryDelay = Duration(seconds: 5);
   static const _callTimeout = Duration(minutes: 5);
 
-  /// Providers take tool names of at most this many characters.
-  static const _maxNameLength = 64;
-
-  static const _maxInstructions = 2000;
-
   /// Notified when a server connects, drops or relists its tools.
   static final changes = RNode();
 
@@ -61,16 +62,7 @@ abstract final class McpTools {
 
   /// The id a server's tools are prefixed with: from its URL, so it stays the
   /// same across launches and when another server is removed.
-  static String nameFor(String url) => 'mcp${_fnv(url)}';
-
-  /// FNV-1a: `String.hashCode` is not stable across runs.
-  static String _fnv(String s) {
-    var h = 0x811c9dc5;
-    for (final c in s.codeUnits) {
-      h = ((h ^ c) * 0x01000193) & 0xffffffff;
-    }
-    return h.toRadixString(16).padLeft(8, '0');
-  }
+  static String nameFor(String url) => LlmMcp.serverId(url);
 
   /// Connects [url], or reconnects it. Failures are kept for [errorOf] and
   /// retried a few times.
@@ -193,10 +185,18 @@ abstract final class McpTools {
         tools.addAll(r.tools);
         cursor = r.nextCursor;
       } while (cursor != null);
-      s.tools = tools;
+      final id = nameFor(s.url), label = s.label;
+      s
+        ..tools = tools
+        ..defs = [
+          for (final t in tools)
+            if (LlmMcp.tool(id, label, t.toJson()) case final def?) (t, def),
+        ];
     } catch (e, st) {
       Loggers.app.warning('MCP ${s.label}: list tools', e, st);
-      s.tools = const [];
+      s
+        ..tools = const []
+        ..defs = const [];
     }
     changes.notify();
   }
@@ -333,7 +333,7 @@ abstract final class McpTools {
         u.isScheme('data') || (u.isScheme('https') && trusted.any((t) => u.host == t || u.host.endsWith('.$t')));
     // The theme's shade, then either, then the other.
     int rank(McpIcon i) => i.theme == null ? 1 : ((i.theme!.name == 'dark') == dark ? 0 : 2);
-    final tool = name == null ? null : s.tools.firstWhereOrNull((t) => toolName(id, t.name) == name);
+    final tool = name == null ? null : s.defs.firstWhereOrNull((d) => d.$2.name == name)?.$1;
     final declared = [...?tool?.icons, ...?info?.icons]..sort((a, b) => rank(a).compareTo(rank(b)));
     final seen = <Uri>{};
     return [
@@ -384,51 +384,36 @@ abstract final class McpTools {
       if (value.connected) key: value.tools.length,
   };
 
-  /// A tool's name as the model sees it: providers take `[a-zA-Z0-9_-]`,
-  /// at most [_maxNameLength], and two servers may both have a `search`.
-  static String toolName(String id, String tool) {
-    final n = '${id}__$tool'.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-    if (n.length <= _maxNameLength) return n;
-    return '${n.substring(0, _maxNameLength - 9)}_${_fnv(tool)}';
-  }
-
-  /// `server · tool` for a tool name of [toolName]'s making, as the user
-  /// reads it.
+  /// `server · tool` for a tool name [llmTools] gave, as the user reads it.
   static String? toolLabel(String name) {
-    for (final MapEntry(key: id, value: s) in _servers.entries) {
-      if (!name.startsWith('${id}__')) continue;
-      final t = s.tools.firstWhereOrNull((t) => toolName(id, t.name) == name);
-      return '${s.label} · ${t?.title ?? t?.name ?? name.substring(id.length + 2)}';
+    for (final s in _servers.values) {
+      for (final (_, def) in s.defs) {
+        if (def.name == name) return def.label;
+      }
     }
     return null;
   }
 
   /// Every tool of every connected server, as the model gets it.
   static List<LlmTool> get llmTools => [
-    for (final MapEntry(key: id, value: s) in _servers.entries)
+    for (final s in _servers.values)
       if (s.connected)
-        for (final t in s.tools)
+        for (final (t, def) in s.defs)
           LlmTool(
-            name: toolName(id, t.name),
-            description: '[${s.label}] ${t.description ?? t.title ?? ''}'.trim(),
-            parameters: t.inputSchema.toJson(),
-            label: '${s.label} · ${t.title ?? t.name}',
+            name: def.name,
+            description: def.description,
+            parameters: def.parameters,
+            label: def.label,
             execute: (call, cancel) => Tools.timed(() => _call(s, t.name, call.args, cancel)),
           ),
   ];
 
   /// What connected servers say about using them, for the system prompt.
-  static String? get instructions {
-    final parts = [
-      for (final s in _servers.values)
-        if (s.connected && (s.client?.getInstructions()?.trim() ?? '').isNotEmpty)
-          '## ${s.label}\n\n${_cap(s.client!.getInstructions()!.trim(), _maxInstructions)}',
-    ];
-    if (parts.isEmpty) return null;
-    return '# MCP servers\n\nInstructions from the MCP servers whose tools you have:\n\n${parts.join('\n\n')}';
-  }
-
-  static String _cap(String s, int n) => s.length <= n ? s : '${s.substring(0, n)}…';
+  static String? get instructions => LlmMcp.instructions([
+    for (final s in _servers.values)
+      if (s.connected)
+        if (s.client?.getInstructions() case final i?) (s.label, i),
+  ]);
 
   static Future<LlmToolResult> _call(_McpServer s, String tool, _Map args, LlmCancelToken cancel) async {
     final client = s.client;
@@ -440,20 +425,12 @@ abstract final class McpTools {
       CallToolRequest(name: tool, arguments: args),
       options: RequestOptions(signal: abort.signal, timeout: _callTimeout),
     );
-    final parts = <Map<String, Object?>>[
-      for (final c in res.content)
-        switch (c) {
-          TextContent() => LlmContent.text(c.text),
-          ImageContent() => LlmContent.image(c.data, c.mimeType),
-          AudioContent() => LlmContent.text('[Audio: ${c.mimeType}, not shown]'),
-          EmbeddedResource(resource: final TextResourceContents r) => LlmContent.text('[${r.uri}]\n${r.text}'),
-          EmbeddedResource(resource: final r) => LlmContent.text('[Resource: ${r.uri}, binary, not shown]'),
-          ResourceLink() => LlmContent.text('[${c.title ?? c.name}](${c.uri})${c.description == null ? '' : ' ${c.description}'}'),
-          _ => LlmContent.text(jsonEncode(c.toJson())),
-        },
-      if (res.content.isEmpty && res.structuredContent != null) LlmContent.text(jsonEncode(res.structuredContent)),
-    ];
-    if (res.isError) throw StateError(parts.map((p) => p['text'] ?? '').join('\n'));
+    final List<Map<String, Object?>> parts;
+    try {
+      (parts, _) = LlmMcp.callResult(tool, res.toJson());
+    } on McpToolError catch (e) {
+      throw StateError(e.message);
+    }
     return LlmToolResult(content: parts);
   }
 }
