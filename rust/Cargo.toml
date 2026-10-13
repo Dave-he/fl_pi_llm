@@ -20,7 +20,7 @@ default = ["frb"]
 # The bridge to Dart (`api`), what the Flutter package builds.
 frb = ["dep:flutter_rust_bridge", "dep:anyhow"]
 # A Rust host (`host`): what a Rust program runs pi with, without Dart.
-host = ["dep:tokio"]
+host = ["dep:tokio", "dep:yaml-rust2"]
 # `host::ReqwestFetch`, HTTP for the Rust host.
 reqwest = ["host", "dep:reqwest"]
 
@@ -31,8 +31,10 @@ getrandom = "0.4"
 rquickjs = { version = "0.14", features = ["either"] }
 regex = "1"
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "rt", "fs", "io-util", "macros"], optional = true }
+tokio = { version = "1", features = ["sync", "rt", "fs", "io-util", "macros", "time"], optional = true }
 reqwest = { version = "0.13", default-features = false, optional = true }
+# SKILL.md front matter (`host::skills`).
+yaml-rust2 = { version = "0.10", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["sync", "rt", "rt-multi-thread", "fs", "io-util", "macros", "time"] }

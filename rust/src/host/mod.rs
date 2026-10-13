@@ -12,7 +12,9 @@
 //! engine.
 
 mod fetch;
+pub mod mcp;
 pub mod memory;
+pub mod skills;
 mod store;
 
 use std::collections::HashMap;

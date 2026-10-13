@@ -81,6 +81,13 @@ same format, so one written by a Rust host opens in an app and the other way
 round. Server Box's monitor agent runs it to keep its Agent sessions on the
 server.
 
+It also has what the apps give a session: the memory (`host::memory`), MCP
+servers' tools over Streamable HTTP through the host's `Fetch`
+(`host::mcp`), and skills — `SKILL.md` folders, found and installed from
+GitHub as `npx skills add` does, listed in the system prompt and loaded with
+the `skill` tool (`host::skills`). Tool names and prompt words are the Dart
+side's, so a session reads the same in both.
+
 ## Layout
 
 | Path | What |
