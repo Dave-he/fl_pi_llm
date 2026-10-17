@@ -172,9 +172,14 @@ class _ComposerState extends State<Composer> {
         );
       }),
       actions: [
-        AttachButton(onPicked: (paths) => _files.value = [..._files.value, ...paths]),
+        // The pickers outlive a composer closed while they are open.
+        AttachButton(onPicked: (paths) {
+          if (mounted) _files.value = [..._files.value, ...paths];
+        }),
         Flexible(
-          child: _ModelChip(chatId: widget.chatId, model: _model, onChanged: () => setState(() {})),
+          child: _ModelChip(chatId: widget.chatId, model: _model, onChanged: () {
+            if (mounted) setState(() {});
+          }),
         ),
         _ThinkingChip(model: _model, compact: widget.compact),
         if (widget.chatId != null) _ToolsToggle(chatId: widget.chatId!),
@@ -396,10 +401,13 @@ class _ModelChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Llm.providers.listenVal((_) {
-      final name = Llm.info(model)?.name ?? model?.id ?? llmL10n.model;
-      return ComposerModelChip(
-        name: name,
+    return ListenableBuilder(
+      listenable: Listenable.merge([Llm.providers, Llm.configured]),
+      builder: (context, _) => ComposerModelChip(
+        name: switch (model) {
+          final m? => Llm.modelLabel(m),
+          null => llmL10n.model,
+        },
         onTap: () async {
           final picked = await pickModel(context, current: model);
           if (picked == null) return;
@@ -411,8 +419,8 @@ class _ModelChip extends StatelessWidget {
           }
           onChanged();
         },
-      );
-    });
+      ),
+    );
   }
 }
 
