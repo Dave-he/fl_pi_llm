@@ -50,7 +50,7 @@ const BG = BACKGROUND_CONTEXT;
 const hostCall = async (name, payload) => JSON.parse(await host.call(name, JSON.stringify(payload)));
 const emit = (payload) => host.emit(JSON.stringify(payload));
 
-const PI_VERSION = '1.1.0';
+const PI_VERSION = '1.4.0';
 
 // ---------------------------------------------------------------------------
 // Storage
@@ -83,6 +83,9 @@ const ChatDoc = defineDoc({
   // `tip`: an entry of `current` to continue from, -1 before the first entry,
   // null at the end.
   initial: () => ({ current: null, tip: null, name: null }),
+  // pi 1.4.0 asks every document for a checkpoint policy, with no default.
+  // The whole state is three fields, written in one go: a base every time.
+  checkpointWhen: () => true,
 });
 
 /** Every chat in storage, by id, with when it was made and last written. */

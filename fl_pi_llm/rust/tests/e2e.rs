@@ -230,7 +230,7 @@ fn runtime_info() {
     let mut h = Harness::new();
     let v = h.request("runtime.info", json!({}));
     assert_eq!(v["ok"], true, "{v}");
-    assert_eq!(v["value"]["piDurable"], "1.1.0");
+    assert_eq!(v["value"]["piDurable"], "1.4.0");
 }
 
 #[test]
